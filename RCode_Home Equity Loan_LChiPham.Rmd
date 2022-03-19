@@ -1,0 +1,528 @@
+---
+title: "Home Equity Loan Default"
+author: "Linh-Chi Pham"
+output: html_document
+---
+
+-------------------------------------------------------------------------------------
+#### I. INTRODUCTION
+
+**1. Context and motivation**
+
+When it comes to financing large expenses, home equity - or second mortgage - is a cost-effective option for many households to liquidate their equity. It is a convenient and accessible method to borrow in bulk at fixed monthly payments and much lower interest rates compared to personal or credit card loans.
+
+However, there are considerable risks associated with this type of financing. These risks go both ways. If taking on a home equity loan equals collateralizing their own home to a borrower, customers' inability to make payments can lead to foreclosure - oftentimes a costly and time-consuming process for the bank. If a 'second' mortgage literally means a borrower doubling their mortgage expenditure and lowering disposable income, customers' stronger need to spend and reduced willingness to save means less deposits - a crucial source of funding for banks.
+
+Given the aforementioned impact home equity loan, it is obvious equity defaults can be as financially destructive as credit defaults. Understanding the bank's need to forecast and mitigate equity risks, we now proceed to build a machine learning model to predict default probability of recorded customers.
+
+**2. Dataset: HMEQ**
+
+This dataset contains 5960 observations and 13 variables on the characteristics and delinquency information of home equity loans.
+
+```{r}
+hmeq <- read.csv("~/Documents/Data Science /R/projects/risk calculator app/credit_risk_calculator/hmeq.csv")
+names(hmeq)
+dim(hmeq)
+str(hmeq)
+```
+
+From the above report, JOB and REASON are the only two factor variables in character format. 11 other variables, including BAD (default status), are numerical variables. We shall keep this format for now, however some time later during the analysis, variable BAD will have to be factorized.
+
+
+#### II. EXPLORATORY DATA ANALYSIS
+
+**1. Clean & Prepare Dataset**
+
+a. Missing values
+
+```{r}
+#Number of missing values
+sum(is.na(hmeq))
+#Visualize
+library(Amelia)
+library(mlbench)
+missmap(hmeq, col = c("steelblue", "brown"), legend = TRUE)
+```
+
+Missing values account for 6% of total observations, or 357 out of 5960. 
+Thus, we cannot just delete the rows with missing values, as we would likely be left with a biased dataset.
+
+b. Approach
+- For numerical variables, replace NAs with mean of the column's observations.
+- For factor variables (JOB & REASON), replace empty category "" with "N/A".
+
+```{r}
+#Numerical variables
+hmeq$DEBTINC[which(is.na(hmeq$DEBTINC))] <- mean(hmeq$DEBTINC, na.rm = TRUE)
+hmeq$DEROG[which(is.na(hmeq$DEROG))] <- round(mean(hmeq$DEROG, na.rm = TRUE), 0)
+hmeq$DELINQ[which(is.na(hmeq$DELINQ))] <- round(mean(hmeq$DELINQ, na.rm = TRUE), 0)
+hmeq$MORTDUE[which(is.na(hmeq$MORTDUE))] <- round(mean(hmeq$MORTDUE, na.rm = TRUE), 0)
+hmeq$YOJ[which(is.na(hmeq$YOJ))] <- round(mean(hmeq$YOJ, na.rm = TRUE), 1)
+hmeq$NINQ[which(is.na(hmeq$NINQ))] <- round(mean(hmeq$NINQ, na.rm = TRUE), 0)
+hmeq$CLAGE[which(is.na(hmeq$CLAGE))] <- mean(hmeq$CLAGE, na.rm = TRUE)
+hmeq$CLNO[which(is.na(hmeq$CLNO))] <- round(mean(hmeq$CLNO, na.rm = TRUE), 0)
+hmeq$VALUE[which(is.na(hmeq$VALUE))] <- round(mean(hmeq$VALUE, na.rm = TRUE), 0)
+
+#Factor variables
+hmeq$JOB[hmeq$JOB == ""] <- "N/A"
+hmeq$REASON[hmeq$REASON == ""] <- "N/A"
+
+#Observe dataset
+sum(is.na(hmeq))
+missmap(hmeq, col = c("steelblue", "brown"), legend = TRUE)
+```
+
+Now that our dataset is cleaned of NAs, we can move on to plotting and visualizing data.
+
+**2. Data Visualization**
+
+```{r}
+#Load required packages
+library(ggplot2)
+library(cowplot)
+library(plotly)
+
+#Factorize BAD into 2 levels: 0: Paid, 1: Defaulted
+plot_dt <- hmeq
+plot_dt$BAD <- factor(plot_dt$BAD, labels = c("Paid", "Defaulted"))
+head(plot_dt$BAD)
+
+#Disable exponential notation in graphs
+options(scipen = 999) 
+```
+
+a. Predictors' relationship with response variable BAD
+```{r}
+#BAD vs DELINQ
+bar1 <- ggplot(plot_dt, aes(BAD, DELINQ, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Delinquent Credit Lines", x = "", y = "Delinquent Credit Lines", fill = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown")) 
+
+#BAD vs DEBTINC
+bar2 <- ggplot(plot_dt, aes(BAD, DEBTINC, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Debt-Income Ratio", x = "", y = "Debt:Income", fill = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown")) 
+
+#BAD vs DEROG
+bar3 <- ggplot(plot_dt, aes(BAD, DEROG, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Derogatory Reports", x = "", y = "Derogatory Reports", fill = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown"))  
+
+#BAD vs CLAGE
+bar4 <- ggplot(plot_dt, aes(BAD, CLAGE, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Oldest Credit Line", x = "", y = "Age", fill = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown"))  
+
+#BAD vs LOAN
+bar5 <- ggplot(plot_dt, aes(BAD, LOAN, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Loan Request Amount", x = "", y = "Loan", color = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown"))
+
+#BAD vs NINQ
+bar6 <- ggplot(plot_dt, aes(BAD, NINQ, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Recent Credit Inquiries", x = "", y = "Recent Inquiries", fill = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown"))
+
+#BAD vs CLNO
+bar7 <- ggplot(plot_dt, aes(BAD, CLNO, fill = BAD)) +
+  geom_bar(stat = "identity", show.legend = F, width = 0.4) +
+  labs(title = "Total Credit Lines", x = "", y = "Credit Lines", fill = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 10), text = element_text(family = "serif"),
+        aspect.ratio = 2/1, panel.grid = element_blank()) +
+  scale_fill_manual(values = c("steelblue", "brown"))
+```
+
+From the set of bar plot above, we can observe the following:
+
+```{r}
+plot_grid(bar1, bar3)
+```
+
+- Borrowers who defaulted on their mortgage have more delinquent credit lines and major derogatory reports than those who did not.
+
+```{r}
+plot_grid(bar4, bar6, bar7, ncol = 3, nrow = 1)
+```
+
+- Intuitively, borrowers who paid their loans are credible to the bank, thus have older credit lines, make more recent credit inquiries, and generally have more credit lines in total than default customers. 
+
+```{r}
+plot_grid(bar2, bar5)
+```
+
+- Borrowers who did not default have significantly higher debt-income ratio as well as loan request amount, as they are able to continue borrowing from the bank given their extensive credit lines (without having to reapply).
+
+b. Variable Correlation
+
+Overview of variable correlation:
+```{r}
+#exclude categorical variables in string format
+library(dplyr)
+num_var <- hmeq %>% 
+  select(BAD, LOAN, MORTDUE, VALUE, YOJ, DEROG, DELINQ, CLAGE, NINQ, CLNO, DEBTINC)
+names(num_var)
+#correlation plot with calculated corr
+library(corrplot)
+corrplot.mixed(cor(num_var), order = "AOE", tl.cex = 0.66, outline = TRUE)
+```
+
+Collinearity Assessment:
+
+Multicollinearity - or co-dependence of variables - can significantly reduce the precision of estimated beta coefficients, as a result weakening the statistical significance of regression model. This is a phenomenon we wish to avoid in our final model. We will now assess the relationships of "seemingly" related sets of variables. 
+
+```{r}
+#VALUE vs MORTDUE
+fit <- lm(plot_dt$MORTDUE~plot_dt$VALUE)
+scatter1 <- ggplot(plot_dt, aes(VALUE, MORTDUE, color = BAD)) +
+  geom_count(position = "jitter", alpha = 0.6, size = 1.6, show.legend = F) +
+  geom_line(aes(y = predict(fit)), col = "brown", size = 0.9) +
+  ylim(c(0, 225000)) +
+  scale_x_log10() +
+  labs(title = "Property value vs Outstanding mortgage", x = "Property value", y = "Outstanding mortgage", size = "Size", color = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 11), text = element_text(family = "serif"),
+        panel.grid = element_blank()) +
+  scale_color_manual(values = c("steelblue", "brown"))
+
+#NINQ vs CLNO
+fit2 <- lm(plot_dt$CLNO~plot_dt$NINQ)
+scatter2 <- ggplot(plot_dt, aes(NINQ, CLNO, color = BAD)) +
+  geom_count(position = "jitter", alpha = 0.6, size = 1.6) +
+  labs(title = "Recent credit inquiries vs Total credit lines", x = "Recent inquiries", y = "Total credit lines", size = "Size", color = "Status") +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 11), text = element_text(family = "serif"),
+        panel.grid = element_blank()) +
+  scale_color_manual(values = c("steelblue", "brown"))
+
+#Aggregate plots
+plot_grid(scatter1, scatter2)
+```
+
+- There is a strong positive exponential relationship between customers' current property value and outstanding mortgages. This indicates that MORTDUE and VALUE should not be included together in the final model.
+- On the other hand, there is an extremely weak relationship between customers' recent credit inquiries and total credit lines. This means that including NINQ and CLNO together would not jeopardize the model's precision.
+
+
+#### III. MODEL DEVELOPMENT
+
+**1. Feature Selection**
+
+First, we will factorize JOB and REASON (variables with more than 2 unrelated categories) into separate variables using one-hot encoding:
+```{r}
+#One-hot encoding
+library(caret)
+dummy <- dummyVars(" ~ .", data=hmeq)
+hmeq_new <- data.frame(predict(dummy, newdata = hmeq)) 
+names(hmeq_new)
+#Factorize BAD into two levels
+hmeq_new$BAD <- as.factor(hmeq_new$BAD)
+```
+
+a. Regression Tree 
+```{r}
+#rpart method to train model
+set.seed(26)
+model <- train(BAD ~ ., data=hmeq_new, method = "rpart")
+rankVars <- varImp(model)
+print(rankVars)
+
+#Rank Features By Importance
+plot(rankVars, top = 18, main = 'Variable Importance')
+```
+
+Top variables ranked by importance are: DEBTINC, DELINQ, DEROG, CLAGE, LOAN, NINQ, CLNO. We will use these variables as parameters for model 1.
+
+b. Random Forest
+```{r}
+library(randomForest)
+rf_model <- randomForest(BAD~., data = hmeq_new)
+importance(rf_model)
+list<- sort(importance(rf_model), decreasing = TRUE)
+plot(list, top = 18, main = 'Variable Importance', ylab = "", xlab = "Variable Index")
+lines(list)
+```
+
+Top variables ranked by importance are: DEBTINC, CLAGE, DELINQ, LOAN, VALUE, CLNO, MORTDUE. We will use these variables as parameters for model 2.
+
+**2. Logistic Regression**
+
+a. Split data into train and test set: 80:20
+```{r}
+set.seed(269)
+# Store row numbers for training set: index_train
+Z <- sample(1:nrow(hmeq_new), 0.8 * nrow(hmeq_new))
+# Create training set: training_set
+train <- hmeq_new[Z, ]
+# Create test set: test_set
+test <- hmeq_new[-Z, ]
+```
+
+b. Compare Models
+Model 1: BAD ~ DEBTINC + DELINQ + DEROG + CLAGE + LOAN + NINQ + CLNO
+```{r}
+#Fit logistic regression model on training set
+train_model <- glm(BAD ~ DEBTINC + DELINQ + DEROG + CLAGE + LOAN + NINQ + CLNO, data = train, family = "binomial")
+summary(train_model)
+#ROC curve
+library(Epi)
+ROC(form = BAD ~ DEBTINC + DELINQ + DEROG + CLAGE + LOAN + NINQ + CLNO, data = train, plot = "ROC", MX = TRUE, PV = TRUE)
+```
+
+The best cutoff point for model 1 as shown in the ROC graph is 0.236.
+Area under the curve is 0.79, indicating an average/good fit of model.
+
+```{r}
+# fit test model to training data
+test$Prob = predict(train_model, newdata = test, type = "response") 
+test$Prediction = 1*(test$Prob > 0.236)
+
+#Confusion matrix on test data
+table(test$Prediction, test$BAD)
+
+#test error rate
+mean(test$Prediction != test$BAD)
+```
+
+--> Model 1's test error rate: 0.216443.
+
+```{r}
+#Cross-validate model 1
+fitControl <- trainControl(method = "cv", number = 10, savePredictions = T)
+modCV <- train(BAD ~ DEBTINC + DELINQ + DEROG + CLAGE + LOAN + NINQ + CLNO, data = hmeq_new, method = "glm", family = "binomial", trControl = fitControl)
+summary(modCV)
+confusionMatrix(table((modCV$pred)$pred, (modCV$pred)$obs))
+```
+
+
+Model 2: BAD ~ DEBTINC + CLAGE + DELINQ + LOAN + VALUE + CLNO + MORTDUE
+```{r}
+#Fit logistic regression model on training set
+train_model2 <- glm(BAD ~ DEBTINC + CLAGE + DELINQ + LOAN + VALUE + CLNO + MORTDUE, data = train, family = "binomial")
+summary(train_model2)
+#ROC curve
+ROC(form = BAD ~ DEBTINC + CLAGE + DELINQ + LOAN + VALUE + CLNO + MORTDUE, data = train, plot = "ROC", MX = TRUE, PV = TRUE)
+```
+
+The best cutoff point for model 1 as shown in the ROC graph is 0.182.
+Area under the curve is 0.766.
+
+```{r}
+# fit test model to training data
+test$Prob = predict(train_model2, newdata = test, type = "response") 
+test$Prediction = 1*(test$Prob > 0.182)
+#Confusion matrix on test data
+table(test$Prediction, test$BAD)
+#test error rate
+mean(test$Prediction != test$BAD)
+```
+
+--> Model 2's test error rate: 0.3028523.
+
+```{r}
+#Cross-validate model 2
+fitControl <- trainControl(method = "cv", number = 10, savePredictions = T)
+modCV <- train(BAD ~ DEBTINC + CLAGE + DELINQ + LOAN + VALUE + CLNO + MORTDUE, data = hmeq_new, method = "glm", family = "binomial", trControl = fitControl)
+summary(modCV)
+confusionMatrix(table((modCV$pred)$pred, (modCV$pred)$obs))
+```
+
+**3. Summary**
+
+```{r}
+test_error <- c(0.216443, 0.3028523)
+auc <- c(0.79, 0.76)
+accuracy <- c(0.8359, 0.8263)
+dts <- data.frame(test_error, auc, accuracy)
+colnames(dts) <- c("Test Error Rate", "Area Under Curve", "Accuracy Test")
+row.names(dts) <- c("Model 1", "Model 2")
+dts
+```
+
+
+After comparing 2 models, we choose model 1 as our final model.
+Final model in mathematical equation:
+
+
+#### IV. APPLICATION
+
+This web app functions like a calculator, taking new customers' info (variables included in final model: DEBTINC, DELINQ, DEROG, CLAGE, LOAN, NINQ, CLNO) as input and outputting said customer's mortgage default probability. 
+
+Based on the quantile in which this probability is, as well as the (adjustable) loan acceptance rate of the bank, the app ultimately outputs the bank's decision on whether to lend to this new customer. If the customer's default probability falls in a higher percentile than the acceptance rate, they are not qualified for loan. On the other hand, if the default probability lies in the acceptable range, the customer is qualified for loan.
+
+```{r}
+library(shiny)
+library(reshape2)
+library(scales)
+
+# Define UI 
+ui <- fluidPage(
+    # Application title
+    titlePanel(h3("Equity Risk Calculator", align = "center")),
+    h6(tags$a(href = "https://github.com/lchipham", "Source code: Linh-Chi Pham"), align = "center"),
+    # Sidebar with a slider input
+    sidebarLayout(
+        sidebarPanel(
+            h4("CUSTOMER INFO"),
+            sliderInput("debtinc",
+                        "Debt-Income Ratio",
+                        min = round(0.5244992,2),
+                        max = round(203.3121487,2),
+                        value = 16),
+            sliderInput("delinq",
+                        "Delinquent Credit Lines",
+                        min = 0,
+                        max = 15,
+                        value = 1),
+            sliderInput("derog",
+                        "Major Derogatory Reports",
+                        min = 0,
+                        max = 10,
+                        value = 1),
+            sliderInput("clage",
+                        "Oldest Credit Line (month)",
+                        min = 0,
+                        max = round(1168.234,2),
+                        value = 179.77),
+            sliderInput("loan", 
+                        "Loan Request Amount",  
+                         min = 1100,
+                         max = 89900,
+                         value = 18608),
+            sliderInput("ninq",
+                        "Recent Credit Inquiries",
+                        min = 0,
+                        max = 17,
+                        value = 2),
+            sliderInput("clno",
+                        "Total Credit Lines",
+                        min = 0,
+                        max = 71,
+                        value = 21)
+        ),
+
+        # Show text output + result
+        mainPanel(
+           numericInput("acc_rate", "Loan Acceptance Rate (%):",  
+                        min = 0,
+                        max = 100,
+                        value = 80, width = "200px"),
+           uiOutput("text"),
+           br(),
+           plotOutput("percentileZ"),
+           uiOutput("decision")
+        )
+    )
+)
+
+# Define server logic
+server <- function(input, output) {
+  default_prob <- function(X1 = 16, X2 = 1, X3 = 1, X4 = 179.77, X5 = 18608, X6 = 2, X7 = 21, pct = TRUE, plotDT = TRUE) {
+    lm_mod <- -2.37457089 + 0.05227723*X1 + 0.75513589*X2 + 0.63659597*X3 - 0.00509945*X4 - 0.00001965*X5 + 0.167474596*X6 - 0.01794787*X7
+    prob <- exp(lm_mod) / 1 + exp(lm_mod)
+    Def_Prob <<- prob
+    
+    if (pct == TRUE) {
+      zscore <- (Def_Prob - 0.2079319) / 0.2003866
+      Zscore <<- zscore
+      pct_score <- pnorm(Def_Prob, mean = 0.2079319, sd = 0.2003866)
+      PCT_cus <<- pct_score
+    }
+    
+    if (plotDT == TRUE) {
+      dt <- data.frame(scores = readRDS("testProb.RData"))
+      dens <- density(dt$scores)
+      df <- data.frame(x=dens$x, y=dens$y)
+      quantiles <- quantile(dt$scores, prob=(input$acc_rate/100))
+      df$quantile <- factor(findInterval(df$x, quantiles), labels = c("Accept", "Refuse"))
+      ggplot(df, aes(x, y)) + 
+        geom_line() + 
+        geom_ribbon(aes(ymin=0, ymax=y, fill=quantile)) + 
+        scale_x_continuous(breaks=quantiles) +
+        geom_vline(xintercept = quantiles, color = "black", linetype = "dashed", size=0.69) +
+        geom_text(aes(x = quantiles - 0.026, label = "cutoff line", y=2.5), colour="black", angle=90, family = "serif") +
+        geom_vline(xintercept = Def_Prob, col = "brown", linetype = "dashed", size=0.69) +
+        geom_text(aes(x=Def_Prob - 0.026, label="customer percentile", y=2.5), colour="brown", angle=90, family = "serif") +
+        labs(title = "Distribution of Default Probability", fill = "Decision", x = "Percentile", y = "") +
+        theme_bw() +
+        theme(plot.title = element_text(face = "bold", hjust = 0.5, size = 14), text = element_text(family = "serif"),
+              panel.grid = element_blank()) +
+        scale_fill_brewer(palette = "OrRd")
+    }
+  }
+  output$text <- renderUI({
+    default_prob(X1 = input$debtinc, X2 = input$delinq, X3 = input$derog, X4 = input$clage, X5 = input$loan, X6 = input$ninq, X7 = input$clno, pct = TRUE, plotDT = FALSE)
+    HTML(paste0(
+      "<b>", "Default Probability: ", format(round(Def_Prob, digits = 2)), "</b>",
+      "<br>",
+      "This customer's default probability is in the ", format(round(PCT_cus*100, digits = 2)), "th percentile.",
+      "<br>"
+    ))
+  })
+  
+  output$percentileZ <- renderPlot({
+    default_prob(X1 = input$debtinc, X2 = input$delinq, X3 = input$derog, X4 = input$clage, X5 = input$loan, X6 = input$ninq, X7 = input$clno, pct = TRUE, plotDT = TRUE)
+  })
+  
+  output$decision <- renderUI({
+    default_prob(X1 = input$debtinc, X2 = input$delinq, X3 = input$derog, X4 = input$clage, X5 = input$loan, X6 = input$ninq, X7 = input$clno, pct = TRUE, plotDT = FALSE)
+    if (PCT_cus > (input$acc_rate/100)) {
+      HTML(paste0(
+        "<b>", "Bank's Decision: Refuse","</b>",
+        "<br>",
+        "This customer is not qualified for loan as ", format(round(PCT_cus*100, digits = 2)),"% > ", input$acc_rate, "% acceptance rate.",
+        "<br>"))
+    } else if (PCT_cus <= (input$acc_rate/100)){
+      HTML(paste0(
+        "<b>", "Bank's Decision: Accept","</b>",
+        "<br>",
+        "This customer is qualified for loan as ", format(round(PCT_cus*100, digits = 2)),"% <= ", input$acc_rate, "% acceptance rate.",
+        "<br>"))
+    }
+  })
+}
+
+# Run application 
+shinyApp(ui = ui, server = server)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
